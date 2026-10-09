@@ -1,0 +1,82 @@
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from app.services.dependency_parser import parse_dependency_file
+from app.api.auth import verify_token
+from app.services.registry_service import get_package_metadata
+from app.services.github_service import get_repository_data
+
+router = APIRouter()
+
+MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
+
+
+@router.post("/upload")
+async def upload_dependency_file(
+    file: UploadFile = File(...),
+    user=Depends(verify_token),
+):
+    raw = await file.read()
+
+    if len(raw) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large")
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="File is not valid UTF-8 text"
+        )
+
+    try:
+        dependencies = parse_dependency_file(file.filename, content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not parse dependency file — check its format"
+        )
+
+    if not dependencies:
+        raise HTTPException(
+            status_code=400,
+            detail="No dependencies found in file"
+        )
+
+    return {"filename": file.filename, "dependencies": dependencies}
+
+
+@router.get("/registry-test")
+def registry_test(
+    name: str,
+    ecosystem: str,
+    user=Depends(verify_token),
+
+):
+    result = get_package_metadata(name, ecosystem)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Package not found or registry unreachable"
+        )
+
+    return result
+
+
+
+@router.get("/github-test")
+def github_test(
+    repo_url: str,
+    user=Depends(verify_token),
+):
+    result = get_repository_data(repo_url)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository not found or URL unparseable"
+        )
+
+    return result
