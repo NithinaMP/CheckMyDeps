@@ -1,4 +1,4 @@
-
+import time
 from app.services import github_service
 from app.ml import feature_mapping, predictor
 
@@ -10,7 +10,7 @@ def _undetermined(reason: str) -> dict:
     }
 
 
-def predict_repository_maintenance(repository_url: str) -> dict:
+def _predict(repository_url: str) -> dict:
     if not repository_url:
         return _undetermined("GitHub repository URL is missing.")
 
@@ -48,3 +48,25 @@ def predict_repository_maintenance(repository_url: str) -> dict:
         "features": dict(zip(feature_mapping.FEATURES, vector)),
         "prediction": prediction,
     }
+
+_CACHE = {}
+CACHE_TTL_SECONDS = 6 * 3600
+
+
+def predict_maintenance_status(repository_url):
+    key = (repository_url or "").lower()
+
+    hit = _CACHE.get(key)
+    if hit and time.time() - hit[0] < CACHE_TTL_SECONDS:
+        return hit[1]
+
+    result = _predict(repository_url)
+
+    if result.get("status") != "Unable to determine":
+        _CACHE[key] = (time.time(), result)
+
+    return result
+
+
+def predict_repository_maintenance(repository_url: str) -> dict:
+    return predict_maintenance_status(repository_url)

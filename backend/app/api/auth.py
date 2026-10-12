@@ -1,23 +1,21 @@
-from fastapi import Depends, APIRouter, Header, HTTPException
+from fastapi import Depends, APIRouter, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from firebase_admin import auth as firebase_auth
 
 # This import ensures Firebase Admin is initialized
 from app.database.firestore import db
 
 router = APIRouter()
+security = HTTPBearer()
 
 
-def verify_token(authorization: str = Header(...)):
-    """Dependency used by protected routes to confirm the request
-    carries a valid Firebase ID token."""
+def verify_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """Verify Firebase ID token."""
 
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Missing bearer token"
-        )
-
-    token = authorization[len("Bearer "):].strip()
+    token = credentials.credentials
 
     try:
         decoded = firebase_auth.verify_id_token(token)

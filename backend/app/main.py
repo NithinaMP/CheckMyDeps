@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, dependency
+
+from app.api import auth, dependency, analysis
 
 app = FastAPI(title="Dependency Governance Platform")
 
@@ -16,6 +17,8 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(dependency.router, prefix="/dependency", tags=["dependency"])
+
+app.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
 
 @app.get("/")
 def health_check():
