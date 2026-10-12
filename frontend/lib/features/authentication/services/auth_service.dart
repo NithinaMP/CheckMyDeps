@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -27,7 +28,11 @@ class AuthService {
       });
       return null; // null = success
     } on FirebaseAuthException catch (e) {
-      return e.message ?? 'Registration failed';
+      debugPrint('Firebase Auth error: ${e.code} - ${e.message}');
+      return '${e.code}: ${e.message ?? 'Registration failed'}';
+    } catch (e) {
+      debugPrint('Registration error: $e');
+      return 'Registration failed: $e';
     }
   }
 
@@ -46,8 +51,18 @@ class AuthService {
   Future<void> logout() => _auth.signOut();
 
   /// Token sent to FastAPI to verify the user on protected endpoints
+  // Future<String?> getIdToken() async {
+  //   final user = _auth.currentUser;
+  //   if (user == null) return null;
+  //   return await user.getIdToken(true);
+  // }
   Future<String?> getIdToken() async {
     final user = _auth.currentUser;
     if (user == null) return null;
-    return await user.getIdToken(true);
-  }}
+
+    final token = await user.getIdToken(true);
+    print('FIREBASE ID TOKEN: $token');
+    return token;
+  }
+
+}

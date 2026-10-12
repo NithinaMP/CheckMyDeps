@@ -5,6 +5,11 @@ from app.api.auth import verify_token
 from app.services.registry_service import get_package_metadata
 from app.services.github_service import get_repository_data
 
+from typing import Optional
+from app.services.osv_service import get_vulnerability_data
+
+from app.services.ml_service import predict_repository_maintenance
+
 router = APIRouter()
 
 MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
@@ -77,6 +82,38 @@ def github_test(
         raise HTTPException(
             status_code=404,
             detail="Repository not found or URL unparseable"
+        )
+
+    return result
+
+
+@router.get("/osv-test")
+def osv_test(
+    name: str,
+    ecosystem: str,
+    version: Optional[str] = None,
+    user=Depends(verify_token),
+):
+    result = get_vulnerability_data(name, ecosystem, version)
+
+    if result["status"] == "unsupported_ecosystem":
+        raise HTTPException(status_code=400, detail=result["reason"])
+
+    return result
+
+
+
+@router.get("/ml-test")
+def ml_test(
+    repo_url: str,
+    user=Depends(verify_token),
+):
+    result = predict_repository_maintenance(repo_url)
+
+    if "error" in result:
+        raise HTTPException(
+            status_code=502,
+            detail=result["error"],
         )
 
     return result

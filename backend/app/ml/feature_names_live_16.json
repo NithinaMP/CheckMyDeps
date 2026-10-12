@@ -1,0 +1,25 @@
+{
+  "features": [
+    "commits1",
+    "commits2",
+    "commits3",
+    "commits4",
+    "commits5",
+    "commits6",
+    "commits7",
+    "commits8",
+    "Max days without commits 1",
+    "Max days without commits 2",
+    "Max days without commits 3",
+    "Max days without commits 4",
+    "Max days without commits 5",
+    "Max days without commits 6",
+    "Max days without commits 7",
+    "Max days without commits 8"
+  ],
+  "n_windows": 8,
+  "window_days": 90,
+  "target": "Failed (1 = Yes = unmaintained)",
+  "algorithm": "RandomForestClassifier(n_estimators=300, max_depth=12, random_state=42)",
+  "cv_f1_mean": 0.826
+}
