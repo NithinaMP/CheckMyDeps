@@ -32,4 +32,27 @@ class AnalysisService {
       );
     }
   }
+
+  /// Calls the limited unauthenticated guest endpoint: POST /analysis/guest-run
+  Future<AnalysisResult> runGuest({
+    required String filename,
+    required Uint8List bytes,
+  }) async {
+    final json = await _api.postMultipart(
+      '/analysis/guest-run',
+      fileField: 'file',
+      filename: filename,
+      bytes: bytes,
+      requiresAuth: false,
+    );
+
+    try {
+      return AnalysisResult.fromJson(json);
+    } catch (_) {
+      throw const ApiException(
+        ApiErrorKind.malformedResponse,
+        'The analysis finished but the response was not in the expected format.',
+      );
+    }
+  }
 }

@@ -3,24 +3,37 @@ import 'package:flutter/material.dart';
 import '../../features/dependency_analysis/models/analysis_result.dart';
 import '../theme/app_colors.dart';
 
-/// Generic coloured pill.
+/// Generic precision tag used throughout tables and inspectors.
 class StatusBadge extends StatelessWidget {
-  const StatusBadge(this.label, this.color, {super.key});
+  const StatusBadge(
+    this.label,
+    this.color, {
+    super.key,
+    this.backgroundColor,
+  });
 
   final String label;
   final Color color;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
       decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(999),
+        color: backgroundColor ?? color.withAlpha(20),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withAlpha(60)),
       ),
-      child: Text(label,
-          style: TextStyle(
-              color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+          letterSpacing: 0.2,
+        ),
+      ),
     );
   }
 }
@@ -65,7 +78,7 @@ Color licenseColor(String? status) {
     case 'NON_COMPLIANT':
       return AppColors.critical;
     case 'NOT_IN_POLICY':
-      return AppColors.primary;
+      return AppColors.accent;
     default:
       return AppColors.neutral;
   }
@@ -129,10 +142,10 @@ class VulnerabilityBadge extends StatelessWidget {
     if (v == null || !v.isVerified || v.count == null) {
       return const StatusBadge('Unverified', AppColors.neutral);
     }
-    if (v.count == 0) return const StatusBadge('None', AppColors.low);
+    if (v.count == 0) return const StatusBadge('0 CVEs', AppColors.low);
     final sev = v.highestSeverity;
     final label = (sev == null || sev == 'UNKNOWN' || sev == 'NONE')
-        ? '${v.count}'
+        ? '${v.count} CVEs'
         : '${v.count} · $sev';
     return StatusBadge(label, severityColor(sev));
   }

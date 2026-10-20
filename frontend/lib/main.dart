@@ -7,7 +7,6 @@ import 'core/theme/app_theme.dart';
 import 'features/dependency_analysis/providers/analysis_provider.dart';
 import 'features/dependency_analysis/services/analysis_service.dart';
 import 'firebase_options.dart';
-import 'core/routes/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +28,7 @@ class GovernanceApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'DepGuard',
+        title: 'CheckMyDeps',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         home: const AuthGate(),

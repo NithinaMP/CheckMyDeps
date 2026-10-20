@@ -23,6 +23,10 @@ class AnalysisResult {
     required this.skipped,
     required this.notes,
     required this.policyUsed,
+    this.isGuestResult = false,
+    this.totalInFile,
+    this.guestLimit,
+    this.lockedDependenciesCount,
   });
 
   final String filename;
@@ -31,6 +35,10 @@ class AnalysisResult {
   final int skipped;
   final List<String> notes;
   final Map<String, dynamic> policyUsed;
+  final bool isGuestResult;
+  final int? totalInFile;
+  final int? guestLimit;
+  final int? lockedDependenciesCount;
 
   factory AnalysisResult.fromJson(Map<String, dynamic> json) {
     final summary = _map(json['summary']);
@@ -48,6 +56,10 @@ class AnalysisResult {
       skipped: _int(json['skipped']) ?? 0,
       notes: _strList(json['notes']),
       policyUsed: _map(json['policy_used']) ?? const {},
+      isGuestResult: _bool(json['is_guest_result']) ?? false,
+      totalInFile: _int(json['total_in_file']),
+      guestLimit: _int(json['guest_limit']),
+      lockedDependenciesCount: _int(json['locked_dependencies_count']),
     );
   }
 }

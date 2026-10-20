@@ -6,7 +6,14 @@ import '../services/auth_service.dart';
 /// Combined sign-in / create-account screen.
 /// Navigation after success is automatic: AuthGate listens to Firebase.
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({
+    super.key,
+    this.initialIsRegister = false,
+    this.onBackToLanding,
+  });
+
+  final bool initialIsRegister;
+  final VoidCallback? onBackToLanding;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -19,11 +26,17 @@ class _AuthScreenState extends State<AuthScreen> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
 
-  bool _isRegister = false;
+  late bool _isRegister;
   bool _loading = false;
   bool _obscure = true;
   String? _error;
   String? _info;
+
+  @override
+  void initState() {
+    super.initState();
+    _isRegister = widget.initialIsRegister;
+  }
 
   @override
   void dispose() {
@@ -120,6 +133,18 @@ class _AuthScreenState extends State<AuthScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.onBackToLanding != null) ...[
+            TextButton.icon(
+              onPressed: widget.onBackToLanding,
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Back to CheckMyDeps'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSecondary,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (showLogo) ...[
             Row(children: [
               Container(
@@ -132,7 +157,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
-              Text('DepGuard',
+              Text('CheckMyDeps',
                   style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
             ]),
             const SizedBox(height: 32),
@@ -317,7 +342,7 @@ class _BrandPanel extends StatelessWidget {
               child: const Icon(Icons.shield_outlined, color: Colors.white),
             ),
             const SizedBox(width: 14),
-            const Text('DepGuard',
+            const Text('CheckMyDeps',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 26,

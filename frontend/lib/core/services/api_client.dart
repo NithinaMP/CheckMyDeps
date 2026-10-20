@@ -71,14 +71,17 @@ class ApiClient {
     required Uint8List bytes,
     Map<String, String> fields = const {},
     Duration timeout = ApiConfig.analysisTimeout,
+    bool requiresAuth = true,
   }) async {
     Future<http.Response> attempt(bool forceRefresh) async {
-      final token = await _token(forceRefresh);
       final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
-        ..headers['Authorization'] = 'Bearer $token'
         ..fields.addAll(fields)
         ..files.add(
             http.MultipartFile.fromBytes(fileField, bytes, filename: filename));
+      if (requiresAuth) {
+        final token = await _token(forceRefresh);
+        request.headers['Authorization'] = 'Bearer $token';
+      }
       try {
         return await (() async {
           final streamed = await _http.send(request);
@@ -100,7 +103,7 @@ class ApiClient {
     }
 
     var response = await attempt(false);
-    if (response.statusCode == 401) {
+    if (requiresAuth && response.statusCode == 401) {
       response = await attempt(true);
     }
     return _decode(response);

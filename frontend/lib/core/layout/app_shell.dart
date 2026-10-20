@@ -3,22 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/dashboard/screens/dashboard_screen.dart';
+import '../../features/dependency_analysis/models/analysis_result.dart';
 import '../../features/dependency_analysis/providers/analysis_provider.dart';
+import '../../features/dependency_analysis/screens/dependencies_screen.dart';
+import '../../features/dependency_analysis/screens/dependency_detail_screen.dart';
 import '../../features/dependency_analysis/screens/upload_screen.dart';
+import '../../features/history/screens/history_screen.dart';
+import '../../features/policy/screens/policy_screen.dart';
 import '../theme/app_colors.dart';
 
 class _NavItem {
-  const _NavItem(this.label, this.icon);
+  const _NavItem(this.label, this.icon, this.activeIcon);
   final String label;
   final IconData icon;
+  final IconData activeIcon;
 }
 
-/// Sidebar layout shown after login. Wide screens get a fixed sidebar,
-/// narrow screens get an app bar with a drawer.
+/// Sidebar shell for the authenticated experience.
+/// Wide screens (≥ 900 px) show a fixed sidebar; narrow screens get a drawer.
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.onSignedOut});
 
-  /// Called after sign-out so the caller can navigate to the login screen.
   final VoidCallback onSignedOut;
 
   @override
@@ -28,10 +33,12 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  // More destinations (Dependencies, History...) are added as they are built.
   static const _items = [
-    _NavItem('Dashboard', Icons.dashboard_outlined),
-    _NavItem('Upload & Analyze', Icons.upload_file_outlined),
+    _NavItem('Dashboard', Icons.dashboard_outlined, Icons.dashboard_rounded),
+    _NavItem('Upload & Analyze', Icons.upload_file_outlined, Icons.upload_file_rounded),
+    _NavItem('Dependencies', Icons.inventory_2_outlined, Icons.inventory_2_rounded),
+    _NavItem('History', Icons.history_outlined, Icons.history_rounded),
+    _NavItem('Policy', Icons.policy_outlined, Icons.policy_rounded),
   ];
 
   void _select(int i) => setState(() => _index = i);
@@ -42,17 +49,35 @@ class _AppShellState extends State<AppShell> {
     if (mounted) widget.onSignedOut();
   }
 
+  void _openDependency(DependencyResult dependency) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DependencyDetailScreen(dependency: dependency),
+      ),
+    );
+  }
+
   Widget _page() {
     switch (_index) {
       case 1:
         return UploadScreen(onAnalysisComplete: () => _select(0));
+      case 2:
+        return DependenciesScreen(
+          onOpenDependency: _openDependency,
+          onUploadTap: () => _select(1),
+        );
+      case 3:
+        return HistoryScreen(
+          onOpened: () => _select(0),
+          onUploadTap: () => _select(1),
+        );
+      case 4:
+        return const PolicyScreen();
       default:
         return DashboardScreen(
           onUploadTap: () => _select(1),
-          onViewAll: () => _select(1),
-          onOpenDependency: (dependency) {
-            // TODO: Open the selected dependency's details.
-          },
+          onViewAll: () => _select(2),
+          onOpenDependency: _openDependency,
         );
     }
   }
@@ -67,19 +92,19 @@ class _AppShellState extends State<AppShell> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(wide ? 32 : 16),
+            padding: EdgeInsets.all(wide ? 32 : 20),
             child: _page(),
           ),
-
         ),
       );
 
       if (wide) {
         return Scaffold(
+          backgroundColor: AppColors.background,
           body: Row(
             children: [
               SizedBox(
-                width: 248,
+                width: 256,
                 child: _Sidebar(
                   items: _items,
                   selected: _index,
@@ -87,17 +112,32 @@ class _AppShellState extends State<AppShell> {
                   onSignOut: _signOut,
                 ),
               ),
-              Expanded(child: content),
+              Expanded(
+                child: Container(
+                  color: AppColors.background,
+                  child: content,
+                ),
+              ),
             ],
           ),
         );
       }
 
       return Scaffold(
+        backgroundColor: AppColors.background,
         appBar: AppBar(
-          title: const Text('DepGuard'),
+          title: const Text(
+            'CheckMyDeps',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+            ),
+          ),
           backgroundColor: AppColors.navy,
           foregroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
         ),
         drawer: Drawer(
           backgroundColor: AppColors.navy,
@@ -117,6 +157,8 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
+// ─────────────────────────────────────────────────── Sidebar ───────────────
+
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.items,
@@ -132,78 +174,169 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final email = FirebaseAuth.instance.currentUser?.email ?? 'Signed in';
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email ?? 'Signed in';
+    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
 
     return Container(
-      color: AppColors.navy,
+      decoration: const BoxDecoration(
+        color: AppColors.navy,
+        border: Border(right: BorderSide(color: AppColors.borderDark, width: 1)),
+      ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Brand ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              padding: const EdgeInsets.fromLTRB(18, 24, 18, 28),
               child: Row(
                 children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primary, Color(0xFF7C3AED)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withAlpha(80),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.shield_outlined,
-                        color: Colors.white, size: 22),
+                    child: const Icon(
+                      Icons.shield_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('DepGuard',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800)),
-                        Text('Dependency Governance',
-                            style:
-                                TextStyle(color: Colors.white60, fontSize: 11)),
+                        Text(
+                          'CheckMyDeps',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        Text(
+                          'Dependency Governance',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
+
+            // ── Divider label ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'NAVIGATION',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(40),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            // ── Nav tiles ──────────────────────────────────────
             for (var i = 0; i < items.length; i++)
               _NavTile(
                 item: items[i],
                 selected: i == selected,
                 onTap: () => onSelect(i),
               ),
+
             const Spacer(),
-            const Divider(color: Colors.white12, height: 1),
+
+            // ── Footer divider ─────────────────────────────────
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              color: Colors.white.withAlpha(15),
+            ),
+            const SizedBox(height: 12),
+
+            // ── User row ───────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(12, 0, 8, 16),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.white12,
-                    child: Text(
-                      email.isNotEmpty ? email[0].toUpperCase() : '?',
-                      style: const TextStyle(color: Colors.white),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primary, Color(0xFF7C3AED)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(email,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 12)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          email,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Text(
+                          'Individual plan',
+                          style: TextStyle(
+                            color: Color(0xFF475569),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Sign out',
-                    onPressed: onSignOut,
-                    icon: const Icon(Icons.logout, color: Colors.white70),
+                  Tooltip(
+                    message: 'Sign out',
+                    child: IconButton(
+                      onPressed: onSignOut,
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      color: Colors.white38,
+                      hoverColor: Colors.white12,
+                    ),
                   ),
                 ],
               ),
@@ -215,7 +348,9 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-class _NavTile extends StatelessWidget {
+// ─────────────────────────────────────────────────── NavTile ───────────────
+
+class _NavTile extends StatefulWidget {
   const _NavTile({
     required this.item,
     required this.selected,
@@ -227,29 +362,65 @@ class _NavTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_NavTile> createState() => _NavTileState();
+}
+
+class _NavTileState extends State<_NavTile> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final active = widget.selected;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Material(
-        color: selected ? Colors.white.withAlpha(26) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: active
+                  ? AppColors.primary.withAlpha(30)
+                  : _hovered
+                  ? Colors.white.withAlpha(8)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: active
+                  ? Border.all(color: AppColors.primary.withAlpha(60), width: 1)
+                  : Border.all(color: Colors.transparent),
+            ),
             child: Row(
               children: [
-                Icon(item.icon,
-                    size: 20, color: selected ? Colors.white : Colors.white60),
+                Icon(
+                  active ? widget.item.activeIcon : widget.item.icon,
+                  size: 18,
+                  color: active ? AppColors.primary : const Color(0xFF64748B),
+                ),
                 const SizedBox(width: 12),
-                Text(
-                  item.label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                Expanded(
+                  child: Text(
+                    widget.item.label,
+                    style: TextStyle(
+                      color: active ? Colors.white : const Color(0xFF94A3B8),
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 13.5,
+                    ),
                   ),
                 ),
+                if (active)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
               ],
             ),
           ),
