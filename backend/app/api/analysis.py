@@ -87,3 +87,63 @@ def run_analysis(
         dependencies,
         policy,
     )
+
+
+GUEST_MAX_DEPENDENCIES = 5
+
+
+@router.post("/guest-run")
+def run_guest_analysis(
+    file: UploadFile = File(...),
+):
+    """Limited analysis for unauthenticated guests.
+    Enforces a strict dependency count limit on the backend and applies DEFAULT_POLICY.
+    """
+    raw = file.file.read(MAX_FILE_SIZE + 1)
+
+    if len(raw) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large (limit is 1 MB)")
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="File is not valid UTF-8 text",
+        )
+
+    try:
+        dependencies = parse_dependency_file(file.filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not parse dependency file",
+        )
+
+    if not dependencies:
+        raise HTTPException(
+            status_code=400,
+            detail="No dependencies found in file",
+        )
+
+    total_in_file = len(dependencies)
+    guest_selected = dependencies[:GUEST_MAX_DEPENDENCIES]
+
+    result = analyze_dependencies(
+        file.filename,
+        guest_selected,
+        DEFAULT_POLICY,
+    )
+
+    result["is_guest_result"] = True
+    result["total_in_file"] = total_in_file
+    result["guest_limit"] = GUEST_MAX_DEPENDENCIES
+    result["locked_dependencies_count"] = max(0, total_in_file - len(guest_selected))
+    result["notes"].append(
+        f"Guest Preview: Analyzed {len(guest_selected)} of {total_in_file} dependencies found in {file.filename}. Sign in to analyze your entire project and access full risk breakdowns."
+    )
+
+    return result
+
