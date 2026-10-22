@@ -11,6 +11,9 @@ enum ApiErrorKind {
   notSignedIn,
   sessionExpired,
   invalidRequest,
+  forbidden,
+  notFound,
+  conflict,
   fileTooLarge,
   serverError,
   network,
@@ -35,6 +38,12 @@ class ApiException implements Exception {
         return 'Authentication required';
       case ApiErrorKind.invalidRequest:
         return 'Could not analyze this file';
+      case ApiErrorKind.forbidden:
+        return 'Not allowed';
+      case ApiErrorKind.notFound:
+        return 'Not found';
+      case ApiErrorKind.conflict:
+        return 'Request conflict';
       case ApiErrorKind.fileTooLarge:
         return 'File too large';
       case ApiErrorKind.serverError:
@@ -65,14 +74,14 @@ class ApiClient {
   /// Sends a multipart upload with the Firebase ID token.
   /// On a 401 it forces a token refresh and retries once.
   Future<Map<String, dynamic>> postMultipart(
-    String path, {
-    required String fileField,
-    required String filename,
-    required Uint8List bytes,
-    Map<String, String> fields = const {},
-    Duration timeout = ApiConfig.analysisTimeout,
-    bool requiresAuth = true,
-  }) async {
+      String path, {
+        required String fileField,
+        required String filename,
+        required Uint8List bytes,
+        Map<String, String> fields = const {},
+        Duration timeout = ApiConfig.analysisTimeout,
+        bool requiresAuth = true,
+      }) async {
     Future<http.Response> attempt(bool forceRefresh) async {
       final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
         ..fields.addAll(fields)
@@ -97,13 +106,66 @@ class ApiClient {
         throw ApiException(
           ApiErrorKind.network,
           'Could not reach the backend at $_baseUrl. '
-          'Make sure the FastAPI server is running.',
+              'Make sure the FastAPI server is running.',
         );
       }
     }
 
     var response = await attempt(false);
     if (requiresAuth && response.statusCode == 401) {
+      response = await attempt(true);
+    }
+    return _decode(response);
+  }
+
+  static const Duration _jsonTimeout = Duration(seconds: 30);
+
+  Future<Map<String, dynamic>> getJson(String path,
+      {Duration timeout = _jsonTimeout}) =>
+      _sendJson('GET', path, timeout: timeout);
+
+  Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body,
+      {Duration timeout = _jsonTimeout}) =>
+      _sendJson('POST', path, body: body, timeout: timeout);
+
+  Future<Map<String, dynamic>> patchJson(String path, Map<String, dynamic> body,
+      {Duration timeout = _jsonTimeout}) =>
+      _sendJson('PATCH', path, body: body, timeout: timeout);
+
+  /// Authenticated JSON request. On a 401 it forces a token refresh and retries once.
+  Future<Map<String, dynamic>> _sendJson(
+      String method,
+      String path, {
+        Map<String, dynamic>? body,
+        required Duration timeout,
+      }) async {
+    Future<http.Response> attempt(bool forceRefresh) async {
+      final request = http.Request(method, Uri.parse('$_baseUrl$path'));
+      request.headers['Authorization'] = 'Bearer ${await _token(forceRefresh)}';
+      request.headers['Accept'] = 'application/json';
+      if (body != null) {
+        request.headers['Content-Type'] = 'application/json; charset=utf-8';
+        request.body = jsonEncode(body);
+      }
+      try {
+        final streamed = await _http.send(request).timeout(timeout);
+        return await http.Response.fromStream(streamed).timeout(timeout);
+      } on TimeoutException {
+        throw const ApiException(
+          ApiErrorKind.timeout,
+          'The request took too long. Please try again.',
+        );
+      } on http.ClientException {
+        throw ApiException(
+          ApiErrorKind.network,
+          'Could not reach the backend at $_baseUrl. '
+              'Make sure the FastAPI server is running.',
+        );
+      }
+    }
+
+    var response = await attempt(false);
+    if (response.statusCode == 401) {
       response = await attempt(true);
     }
     return _decode(response);
@@ -155,6 +217,24 @@ class ApiClient {
           ApiErrorKind.sessionExpired,
           'Your session has expired or is invalid. Please sign in again.',
           statusCode: 401,
+        );
+      case 403:
+        throw ApiException(
+          ApiErrorKind.forbidden,
+          detail ?? 'You do not have permission to do that.',
+          statusCode: 403,
+        );
+      case 404:
+        throw ApiException(
+          ApiErrorKind.notFound,
+          detail ?? 'That item was not found.',
+          statusCode: 404,
+        );
+      case 409:
+        throw ApiException(
+          ApiErrorKind.conflict,
+          detail ?? 'The request conflicts with the current state.',
+          statusCode: 409,
         );
       case 413:
         throw ApiException(

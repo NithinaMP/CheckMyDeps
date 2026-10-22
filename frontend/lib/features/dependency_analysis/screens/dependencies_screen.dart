@@ -178,7 +178,7 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
                   children: [
                     for (var i = 0; i < visible.length; i++) ...[
                       if (i > 0) const Divider(height: 1),
-                      _DependencyRow(
+                      DependencyRow(
                         dep: visible[i],
                         compact: compact,
                         onTap: () => widget.onOpenDependency(visible[i]),
@@ -194,8 +194,9 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
   }
 }
 
-class _DependencyRow extends StatelessWidget {
-  const _DependencyRow({
+class DependencyRow extends StatelessWidget {
+  const DependencyRow({
+    super.key,
     required this.dep,
     required this.compact,
     required this.onTap,

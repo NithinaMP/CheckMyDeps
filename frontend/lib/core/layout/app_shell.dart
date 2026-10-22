@@ -1,7 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../features/projects/providers/project_analysis_provider.dart';
 
+import '../../features/projects/providers/project_provider.dart';
+import '../../features/projects/screens/projects_screen.dart';
+import '../../features/organization/providers/org_dashboard_provider.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/dependency_analysis/models/analysis_result.dart';
 import '../../features/dependency_analysis/providers/analysis_provider.dart';
@@ -9,14 +13,21 @@ import '../../features/dependency_analysis/screens/dependencies_screen.dart';
 import '../../features/dependency_analysis/screens/dependency_detail_screen.dart';
 import '../../features/dependency_analysis/screens/upload_screen.dart';
 import '../../features/history/screens/history_screen.dart';
+import '../../features/organization/models/organization.dart';
+import '../../features/organization/providers/organization_provider.dart';
+import '../../features/organization/screens/org_home_screen.dart';
+import '../../features/organization/widgets/workspace_switcher.dart';
 import '../../features/policy/screens/policy_screen.dart';
 import '../theme/app_colors.dart';
 
 class _NavItem {
-  const _NavItem(this.label, this.icon, this.activeIcon);
+  const _NavItem(this.label, this.icon, this.activeIcon, [this.minRole]);
   final String label;
   final IconData icon;
   final IconData activeIcon;
+
+  /// Organisation items only: hidden unless the user's role is at least this.
+  final OrgRole? minRole;
 }
 
 /// Sidebar shell for the authenticated experience.
@@ -33,7 +44,15 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  static const _items = [
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<OrganizationProvider>().load();
+    });
+  }
+
+  static const _personalItems = [
     _NavItem('Dashboard', Icons.dashboard_outlined, Icons.dashboard_rounded),
     _NavItem('Upload & Analyze', Icons.upload_file_outlined, Icons.upload_file_rounded),
     _NavItem('Dependencies', Icons.inventory_2_outlined, Icons.inventory_2_rounded),
@@ -41,10 +60,30 @@ class _AppShellState extends State<AppShell> {
     _NavItem('Policy', Icons.policy_outlined, Icons.policy_rounded),
   ];
 
+  /// Role-aware navigation for organisation workspaces. Later features append
+  /// items here with a `minRole` (e.g. Members -> OrgRole.admin).
+  static const _orgItems = [
+    _NavItem('Overview', Icons.apartment_outlined, Icons.apartment_rounded,
+        OrgRole.developer),
+    _NavItem('Projects', Icons.folder_outlined, Icons.folder_rounded,
+        OrgRole.developer),
+  ];
+
+  List<_NavItem> _itemsFor(OrganizationProvider org) {
+    if (!org.isOrgWorkspace) return _personalItems;
+    return _orgItems
+        .where((i) => org.hasRole(i.minRole ?? OrgRole.developer))
+        .toList(growable: false);
+  }
+
   void _select(int i) => setState(() => _index = i);
 
   Future<void> _signOut() async {
     context.read<AnalysisProvider>().reset();
+    context.read<OrganizationProvider>().reset();
+    context.read<ProjectProvider>().reset();
+    context.read<ProjectAnalysisProvider>().reset();
+    context.read<OrgDashboardProvider>().reset();
     await FirebaseAuth.instance.signOut();
     if (mounted) widget.onSignedOut();
   }
@@ -57,8 +96,24 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _page() {
-    switch (_index) {
+  Widget _page(int index, OrganizationProvider org) {
+    if (org.isOrgWorkspace) {
+      final membership = org.activeMembership!;
+      switch (index) {
+        case 1:
+          return ProjectsScreen(
+            orgId: membership.id,
+            canCreate: org.hasRole(OrgRole.lead),
+          );
+        default:
+          return OrgHomeScreen(
+            key: ValueKey(membership.id),
+            orgId: membership.id,
+            onOpenProjects: () => _select(1),
+          );
+      }
+    }
+    switch (index) {
       case 1:
         return UploadScreen(onAnalysisComplete: () => _select(0));
       case 2:
@@ -86,6 +141,12 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
       final wide = constraints.maxWidth >= 900;
+      final org = context.watch<OrganizationProvider>();
+      final items = _itemsFor(org);
+      final index = _index.clamp(0, items.length - 1);
+      final workspaceLabel = org.isOrgWorkspace
+          ? 'Organisation · ${org.activeRole!.label}'
+          : 'Individual plan';
 
       final content = Align(
         alignment: Alignment.topCenter,
@@ -93,7 +154,7 @@ class _AppShellState extends State<AppShell> {
           constraints: const BoxConstraints(maxWidth: 1200),
           child: SingleChildScrollView(
             padding: EdgeInsets.all(wide ? 32 : 20),
-            child: _page(),
+            child: _page(index, org),
           ),
         ),
       );
@@ -106,10 +167,12 @@ class _AppShellState extends State<AppShell> {
               SizedBox(
                 width: 256,
                 child: _Sidebar(
-                  items: _items,
-                  selected: _index,
+                  items: items,
+                  selected: index,
                   onSelect: _select,
                   onSignOut: _signOut,
+                  workspaceLabel: workspaceLabel,
+                  onWorkspaceChanged: () => _select(0),
                 ),
               ),
               Expanded(
@@ -142,13 +205,18 @@ class _AppShellState extends State<AppShell> {
         drawer: Drawer(
           backgroundColor: AppColors.navy,
           child: _Sidebar(
-            items: _items,
-            selected: _index,
+            items: items,
+            selected: index,
             onSelect: (i) {
               Navigator.of(context).pop();
               _select(i);
             },
             onSignOut: _signOut,
+            workspaceLabel: workspaceLabel,
+            onWorkspaceChanged: () {
+              Navigator.of(context).pop();
+              _select(0);
+            },
           ),
         ),
         body: content,
@@ -165,8 +233,12 @@ class _Sidebar extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.onSignOut,
+    required this.workspaceLabel,
+    required this.onWorkspaceChanged,
   });
 
+  final String workspaceLabel;
+  final VoidCallback onWorkspaceChanged;
   final List<_NavItem> items;
   final int selected;
   final ValueChanged<int> onSelect;
@@ -246,6 +318,12 @@ class _Sidebar extends StatelessWidget {
               ),
             ),
 
+            // ── Workspace switcher ─────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+              child: WorkspaceSwitcher(onChanged: onWorkspaceChanged),
+            ),
+
             // ── Divider label ───────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -319,9 +397,9 @@ class _Sidebar extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const Text(
-                          'Individual plan',
-                          style: TextStyle(
+                        Text(
+                          workspaceLabel,
+                          style: const TextStyle(
                             color: Color(0xFF475569),
                             fontSize: 10,
                           ),
